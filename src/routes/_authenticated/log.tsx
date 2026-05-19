@@ -27,20 +27,29 @@ function timeAgo(iso: string) {
 }
 
 function LastActivityPanel({ activity }: { activity: LastActivity }) {
+  const timestamp = activity.unlockedAt ?? activity.lastTimePlayed;
   return (
     <div className="mb-4 flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
       {activity.achievementIcon ? (
         <img src={activity.achievementIcon} alt="" className="h-12 w-12 shrink-0 rounded" />
+      ) : activity.titleImage ? (
+        <img src={activity.titleImage} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
       ) : (
         <div className="h-12 w-12 shrink-0 rounded bg-secondary" />
       )}
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">
-          Last seen · {activity.titleName} · {timeAgo(activity.unlockedAt)}
+          Last seen · {activity.titleName} · {timeAgo(timestamp)}
         </p>
-        <p className="truncate text-sm font-medium">{activity.achievementName}</p>
-        {activity.achievementDescription && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{activity.achievementDescription}</p>
+        {activity.achievementName ? (
+          <>
+            <p className="truncate text-sm font-medium">{activity.achievementName}</p>
+            {activity.achievementDescription && (
+              <p className="text-xs text-muted-foreground line-clamp-2">{activity.achievementDescription}</p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">Achievement details unavailable</p>
         )}
       </div>
     </div>

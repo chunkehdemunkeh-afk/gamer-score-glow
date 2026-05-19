@@ -78,10 +78,11 @@ export type XblTitle = {
 export type LastActivity = {
   titleName: string;
   titleImage: string | null;
-  achievementName: string;
-  achievementDescription: string;
+  lastTimePlayed: string;
+  achievementName: string | null;
+  achievementDescription: string | null;
   achievementIcon: string | null;
-  unlockedAt: string;
+  unlockedAt: string | null;
 };
 
 type RawTitle = {
@@ -105,33 +106,45 @@ type RawAchievement = {
   rewards?: Array<{ value?: string; type?: string }>;
 };
 
-async function fetchLastActivity(xuid: string, title: RawTitle): Promise<LastActivity | null> {
-  const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(xuid)}/${encodeURIComponent(title.titleId)}`;
-  const res = await fetch(url, { headers: xblHeaders() });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { achievements?: RawAchievement[] };
-  const unlocked = (json.achievements ?? [])
-    .filter((a) => a.progressState === "Achieved" && a.progression?.timeUnlocked)
-    .map((a) => ({ a, t: new Date(a.progression!.timeUnlocked!) }))
-    .filter(({ t }) => !isNaN(t.getTime()) && t.getFullYear() > 1970)
-    .sort((x, y) => y.t.getTime() - x.t.getTime());
-  if (unlocked.length === 0) return null;
-  const { a, t } = unlocked[0];
-  return {
+async function fetchLastActivity(xuid: string, title: RawTitle): Promise<LastActivity> {
+  const base: LastActivity = {
     titleName: title.name,
     titleImage: title.displayImage ?? null,
-    achievementName: a.name ?? "Unknown achievement",
-    achievementDescription: a.description ?? "",
-    achievementIcon: a.mediaAssets?.find((m) => m.type === "Icon")?.url ?? null,
-    unlockedAt: t.toISOString(),
+    lastTimePlayed: title.titleHistory!.lastTimePlayed!,
+    achievementName: null,
+    achievementDescription: null,
+    achievementIcon: null,
+    unlockedAt: null,
   };
+  try {
+    const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(xuid)}/${encodeURIComponent(title.titleId)}`;
+    const res = await fetch(url, { headers: xblHeaders() });
+    if (!res.ok) return base;
+    const json = (await res.json()) as { achievements?: RawAchievement[] };
+    const unlocked = (json.achievements ?? [])
+      .filter((a) => a.progressState === "Achieved" && a.progression?.timeUnlocked)
+      .map((a) => ({ a, t: new Date(a.progression!.timeUnlocked!) }))
+      .filter(({ t }) => !isNaN(t.getTime()) && t.getFullYear() > 1970)
+      .sort((x, y) => y.t.getTime() - x.t.getTime());
+    if (unlocked.length === 0) return base;
+    const { a, t } = unlocked[0];
+    return {
+      ...base,
+      achievementName: a.name ?? null,
+      achievementDescription: a.description ?? null,
+      achievementIcon: a.mediaAssets?.find((m) => m.type === "Icon")?.url ?? null,
+      unlockedAt: t.toISOString(),
+    };
+  } catch {
+    return base;
+  }
 }
 
 // Fetch all titles for a given xuid and return ONLY 100%-completed ones.
 export const getCompletedTitles = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ xuid: z.string().min(1) }).parse(input))
-  .handler(async ({ data }): Promise<{ titles: XblTitle[]; lastActivity: LastActivity | null }> => {
+  .handler(async ({ data }): Promise<{ titles: XblTitle[]; lastActivity: LastActivity | null  }> => {
     const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(data.xuid)}`;
     const res = await fetch(url, { headers: xblHeaders() });
     if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
