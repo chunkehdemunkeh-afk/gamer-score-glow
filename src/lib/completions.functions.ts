@@ -19,7 +19,7 @@ export const logCompletion = createServerFn({ method: "POST" })
         titleId: z.string().min(1),
         gameName: z.string().min(1).max(200),
         gameCoverUrl: z.string().url().nullable().optional(),
-        hoursPlayed: z.number().positive().max(10000),
+        hoursPlayed: z.number().positive().max(10000).optional(),
       })
       .parse(input),
   )
@@ -83,6 +83,32 @@ export const logCompletion = createServerFn({ method: "POST" })
       return sum + (gs ? parseInt(gs, 10) || 0 : 0);
     }, 0);
 
+    // Shovelware fast-path: window < 90 min and GS >= 500.
+    // No anti-cheat needed — award 1 point and approve immediately.
+    const isShovelware = realWorldSpanHours < 1.5 && totalGs >= 500;
+    if (isShovelware) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("completions")
+        .insert({
+          user_id: userId,
+          title_id: data.titleId,
+          game_name: data.gameName,
+          game_cover_url: data.gameCoverUrl ?? null,
+          total_gamerscore: totalGs,
+          completed_at: latest.toISOString(),
+          hours_played: Math.max(realWorldSpanHours, 0.01),
+          points: 1,
+          status: "approved",
+          flag_reason: null,
+        })
+        .select()
+        .single();
+      if (insertErr) return { ok: false as const, error: insertErr.message };
+      return { ok: true as const, completion: inserted, flagged: false, flags: [], shovelware: true };
+    }
+
+    if (!data.hoursPlayed) return { ok: false as const, error: "Hours played is required" };
+
     // --- Anti-cheat ---
     const flags: string[] = [];
 
@@ -129,7 +155,7 @@ const status = flags.length > 0 ? "flagged" : "approved";
       .single();
     if (insertErr) return { ok: false as const, error: insertErr.message };
 
-    return { ok: true as const, completion: inserted, flagged: flags.length > 0, flags };
+    return { ok: true as const, completion: inserted, flagged: flags.length > 0, flags, shovelware: false };
   });
 
 // Delete a completion.

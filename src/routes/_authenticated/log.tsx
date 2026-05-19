@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { getCompletedTitles, type XblTitle, type LastActivity } from "@/lib/xbox.functions";
+import { getCompletedTitles, getTitleAchievements, type XblTitle, type LastActivity } from "@/lib/xbox.functions";
 import { logCompletion } from "@/lib/completions.functions";
 import { tierLabel, pointsForHours } from "@/lib/scoring";
 import { SiteHeader } from "@/components/site-header";
@@ -60,6 +60,7 @@ function LogPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const fetchTitles = useServerFn(getCompletedTitles);
+  const fetchAchievements = useServerFn(getTitleAchievements);
   const submit = useServerFn(logCompletion);
 
   const [selected, setSelected] = useState<XblTitle | null>(null);
@@ -98,26 +99,41 @@ function LogPage() {
     queryFn: () => fetchTitles({ data: { xuid: profile.data!.xuid } }),
   });
 
+  const gameAchievements = useQuery({
+    queryKey: ["game-achievements", profile.data?.xuid, selected?.titleId],
+    enabled: !!profile.data?.xuid && !!selected,
+    queryFn: () => fetchAchievements({ data: { xuid: profile.data!.xuid, titleId: selected!.titleId } }),
+  });
+
+  const isShovelware = (() => {
+    const d = gameAchievements.data;
+    if (!d?.earliestUnlock || !d?.latestUnlock) return false;
+    const windowHours = (new Date(d.latestUnlock).getTime() - new Date(d.earliestUnlock).getTime()) / 36e5;
+    return windowHours < 1.5 && d.totalGamerscore >= 500;
+  })();
+
   const available = (titles.data?.titles ?? []).filter((t) => !existing.data?.has(t.titleId));
   const hrsNum = Number(hours);
   const validHours = hrsNum > 0 && hrsNum < 10000;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected || !validHours) return;
+    if (!selected || (!isShovelware && !validHours)) return;
     setBusy(true);
     const res = await submit({
       data: {
         titleId: selected.titleId,
         gameName: selected.name,
         gameCoverUrl: selected.displayImage,
-        hoursPlayed: hrsNum,
+        ...(isShovelware ? {} : { hoursPlayed: hrsNum }),
       },
     });
     setBusy(false);
     if (!res.ok) return toast.error(res.error);
     if (res.flagged) {
       toast.warning(`Logged but flagged for review: ${res.flags.join("; ")}`);
+    } else if (res.shovelware) {
+      toast.success("+1 point (shovelware)");
     } else {
       toast.success(`+${pointsForHours(hrsNum)} points!`);
     }
@@ -206,10 +222,14 @@ function LogPage() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Hours played</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>{isShovelware ? "Shovelware detected" : "Hours played"}</CardTitle>
+            </CardHeader>
             <CardContent>
               {!selected ? (
                 <p className="text-muted-foreground">Pick a game on the left.</p>
+              ) : gameAchievements.isLoading ? (
+                <p className="text-muted-foreground">Checking game…</p>
               ) : (
                 <form onSubmit={onSubmit} className="space-y-4">
                   <div className="flex items-center gap-3">
@@ -218,27 +238,35 @@ function LogPage() {
                     )}
                     <p className="font-semibold">{selected.name}</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hrs">How many hours did the 100% take you?</Label>
-                    <Input
-                      id="hrs"
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      required
-                      value={hours}
-                      onChange={(e) => setHours(e.target.value)}
-                    />
-                    {validHours && (
-                      <p className="text-sm text-primary">{tierLabel(hrsNum)}</p>
-                    )}
-                  </div>
-                  <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Heads up: we cross-check your reported hours against the time between your
-                    first and last achievement unlock, the community baseline for this game, and
-                    a gamerscore-per-hour sanity ceiling. Inflated numbers get flagged.
-                  </div>
-                  <Button type="submit" className="w-full" disabled={busy || !validHours}>
+                  {isShovelware ? (
+                    <div className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                      Completion window under 90 minutes — this counts as <span className="font-medium text-foreground">1 point</span>. No time entry needed.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="hrs">How many hours did the 100% take you?</Label>
+                        <Input
+                          id="hrs"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          required
+                          value={hours}
+                          onChange={(e) => setHours(e.target.value)}
+                        />
+                        {validHours && (
+                          <p className="text-sm text-primary">{tierLabel(hrsNum)}</p>
+                        )}
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                        Heads up: we cross-check your reported hours against the time between your
+                        first and last achievement unlock and the community baseline for this game.
+                        Inflated numbers get flagged.
+                      </div>
+                    </>
+                  )}
+                  <Button type="submit" className="w-full" disabled={busy || (!isShovelware && !validHours)}>
                     {busy ? "Logging…" : "Log completion"}
                   </Button>
                 </form>
