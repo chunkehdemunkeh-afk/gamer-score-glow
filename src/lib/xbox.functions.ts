@@ -46,9 +46,9 @@ export const lookupGamertag = createServerFn({ method: "POST" })
         continue;
       }
       const raw = await res.text();
-      let json: { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
+      let json: { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }>; content?: { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> } };
       try { json = JSON.parse(raw); } catch { errors.push(`Bad JSON: ${raw.slice(0, 200)}`); continue; }
-      const person = json.people?.[0];
+      const person = (json.content?.people ?? json.people)?.[0];
       if (person) {
         return {
           ok: true as const,
