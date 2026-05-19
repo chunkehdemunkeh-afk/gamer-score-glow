@@ -47,9 +47,11 @@ Business logic that needs secrets or must not run in the browser lives in `src/l
 
 ### openxbl.io API quirks
 
-- The search endpoint (`GET /search/{gamertag}`) wraps its response in a `content` object: `{ content: { people: [...] } }` — not `{ people: [...] }` at the top level.
+- **`content` envelope** — multiple endpoints wrap their payload in a `content` object. Always unwrap with `const data = json.content ?? json`. Confirmed on: `GET /search/{gamertag}` (`content.people`), `GET /achievements/player/{xuid}` (`content.titles`), `GET /achievements/player/{xuid}/{titleId}` (`content.achievements`).
 - Old-format Xbox gamertags with spaces (pre-2019) must be sent with a raw space in the URL path, not `%20`. Use `encodeURIComponent(tag).replace(/%20/g, " ")`.
 - Do not send `Content-Type` on GET requests; use `Accept-Language: en-GB` instead.
+- `GET /achievements/player/{xuid}` paginates via `continuationToken` in the response — loop until it is absent to retrieve the full title history.
+- `progressState` on achievement objects should be compared case-insensitively (`progressState?.toLowerCase() === "achieved"`) as casing has been observed to vary.
 
 ### Server functions
 
