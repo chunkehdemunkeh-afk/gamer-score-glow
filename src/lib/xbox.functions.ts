@@ -17,24 +17,35 @@ function xblHeaders() {
 // Look up a gamertag → xuid + gamerpic
 export const lookupGamertag = createServerFn({ method: "POST" })
   .inputValidator((input) =>
-    z.object({ gamertag: z.string().trim().min(1).max(15) }).parse(input),
+    z.object({ gamertag: z.string().trim().min(1).max(50) }).parse(input),
   )
   .handler(async ({ data }) => {
-    const res = await fetch(`${XBL_BASE}/search/${encodeURIComponent(data.gamertag)}`, {
-      headers: xblHeaders(),
-    });
-    if (!res.ok) {
-      return { ok: false as const, error: `Lookup failed (${res.status})` };
+    // Try the gamertag as-is first, then without spaces (modern Xbox gamertags
+    // with spaces are often findable via the compact form e.g. "ChunkehMunkeh").
+    const candidates = [data.gamertag];
+    if (data.gamertag.includes(" ")) candidates.push(data.gamertag.replace(/\s+/g, ""));
+
+    for (const candidate of candidates) {
+      const res = await fetch(`${XBL_BASE}/search/${encodeURIComponent(candidate)}`, {
+        headers: xblHeaders(),
+      });
+      if (!res.ok) {
+        console.error(`[xbox] search ${candidate} → HTTP ${res.status}`);
+        continue;
+      }
+      const json = (await res.json()) as { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
+      console.log(`[xbox] search ${candidate} → ${json.people?.length ?? 0} results`);
+      const person = json.people?.[0];
+      if (person) {
+        return {
+          ok: true as const,
+          xuid: person.xuid,
+          gamertag: person.gamertag,
+          gamerpic: person.displayPicRaw ?? null,
+        };
+      }
     }
-    const json = (await res.json()) as { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
-    const person = json.people?.[0];
-    if (!person) return { ok: false as const, error: "Gamertag not found" };
-    return {
-      ok: true as const,
-      xuid: person.xuid,
-      gamertag: person.gamertag,
-      gamerpic: person.displayPicRaw ?? null,
-    };
+    return { ok: false as const, error: "Gamertag not found" };
   });
 
 export type XblTitle = {
