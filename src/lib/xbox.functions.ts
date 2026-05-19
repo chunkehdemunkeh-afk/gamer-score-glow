@@ -157,6 +157,7 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
       const json = (await res.json()) as { titles?: RawTitle[]; continuationToken?: string };
       allTitles.push(...(json.titles ?? []));
       continuation = json.continuationToken ?? null;
+      if (allTitles.length <= 3) console.log("[xbox] sample title structure:", JSON.stringify(json.titles?.[0], null, 2));
     } while (continuation);
 
     const titles = allTitles
