@@ -20,15 +20,18 @@ export const lookupGamertag = createServerFn({ method: "POST" })
     z.object({ gamertag: z.string().trim().min(1).max(50) }).parse(input),
   )
   .handler(async ({ data }) => {
-    // Old-format Xbox gamertags can have spaces. Try several encodings because
-    // the openxbl search endpoint is inconsistent with spaces in path segments.
+    // Old-format Xbox gamertags can have spaces. The working Python approach uses
+    // requests.utils.quote(gamertag) with safe='/' which leaves spaces as raw
+    // spaces in the URL (not %20). We replicate that by encoding manually.
     const spaceless = data.gamertag.replace(/\s+/g, "");
-    const plusEncoded = data.gamertag.replace(/\s+/g, "+");
-    const candidates = [...new Set([data.gamertag, spaceless, plusEncoded])];
+    const candidates = [...new Set([data.gamertag, spaceless])];
 
     const errors: string[] = [];
     for (const candidate of candidates) {
-      const url = `${XBL_BASE}/search/${encodeURIComponent(candidate)}`;
+      // Encode everything except spaces, then replace spaces with raw space
+      // (matching Python's requests.utils.quote default behaviour).
+      const encoded = encodeURIComponent(candidate).replace(/%20/g, " ");
+      const url = `${XBL_BASE}/search/${encoded}`;
       let res: Response;
       try {
         res = await fetch(url, { headers: xblHeaders() });
