@@ -89,6 +89,7 @@ type RawTitle = {
   titleId: string;
   name: string;
   displayImage?: string;
+  titleType?: string;
   achievement?: {
     currentGamerscore?: number;
     totalGamerscore?: number;
@@ -164,9 +165,9 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
         isComplete: true,
       }));
 
-    // Find the most recently played title across all titles to gauge API staleness.
+    // Find the most recently played game (skip apps, which have no achievements endpoint).
     const mostRecent = allTitles
-      .filter((t) => t.titleHistory?.lastTimePlayed)
+      .filter((t) => t.titleHistory?.lastTimePlayed && t.titleType?.toLowerCase() !== "application")
       .sort(
         (a, b) =>
           new Date(b.titleHistory!.lastTimePlayed!).getTime() -
