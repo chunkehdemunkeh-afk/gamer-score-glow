@@ -108,18 +108,7 @@ export const logCompletion = createServerFn({ method: "POST" })
       }
     }
 
-    // 3. Gamerscore-per-hour sanity check.
-    // Use the achievement window as the floor for hours — title update completions report
-    // only the time for new achievements, but the game was played over a longer span.
-    if (totalGs > 0 && data.hoursPlayed > 0) {
-      const effectiveHours = Math.max(data.hoursPlayed, realWorldSpanHours);
-      const gsPerHour = totalGs / effectiveHours;
-      if (gsPerHour > 500) {
-        flags.push(`Implausible gamerscore-per-hour (${gsPerHour.toFixed(0)})`);
-      }
-    }
-
-    const status = flags.length > 0 ? "flagged" : "approved";
+const status = flags.length > 0 ? "flagged" : "approved";
     const points = pointsForHours(data.hoursPlayed);
 
     const { data: inserted, error: insertErr } = await supabase
