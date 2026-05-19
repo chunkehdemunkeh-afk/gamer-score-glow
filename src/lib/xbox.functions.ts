@@ -157,7 +157,6 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
       const json = (await res.json()) as { titles?: RawTitle[]; continuationToken?: string };
       allTitles.push(...(json.titles ?? []));
       continuation = json.continuationToken ?? null;
-      if (allTitles.length <= 3) console.log("[xbox] sample title structure:", JSON.stringify(json.titles?.[0], null, 2));
     } while (continuation);
 
     const titles = allTitles
@@ -184,7 +183,7 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
 
     const lastActivity = mostRecent ? await fetchLastActivity(data.xuid, mostRecent) : null;
 
-    return { titles, lastActivity };
+    return { titles, lastActivity, _sampleTitle: allTitles[0] ?? null };
   });
 
 // Fetch achievement unlock timestamps for a single title (for anti-cheat).

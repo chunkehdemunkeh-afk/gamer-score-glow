@@ -137,6 +137,14 @@ function LogPage() {
           <Card>
             <CardHeader><CardTitle>Pick a 100%-completed game</CardTitle></CardHeader>
             <CardContent>
+              {titles.data?._sampleTitle && (
+                <details className="mb-3 rounded border border-border p-2 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">Debug: raw title fields</summary>
+                  <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all">
+                    {JSON.stringify(titles.data._sampleTitle, null, 2)}
+                  </pre>
+                </details>
+              )}
               {titles.data?.lastActivity && (
                 <LastActivityPanel activity={titles.data.lastActivity} />
               )}
