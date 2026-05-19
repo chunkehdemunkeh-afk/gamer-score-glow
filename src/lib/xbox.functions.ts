@@ -20,21 +20,30 @@ export const lookupGamertag = createServerFn({ method: "POST" })
     z.object({ gamertag: z.string().trim().min(1).max(50) }).parse(input),
   )
   .handler(async ({ data }) => {
-    // Try the gamertag as-is first, then without spaces (modern Xbox gamertags
-    // with spaces are often findable via the compact form e.g. "ChunkehMunkeh").
-    const candidates = [data.gamertag];
-    if (data.gamertag.includes(" ")) candidates.push(data.gamertag.replace(/\s+/g, ""));
+    // Old-format Xbox gamertags can have spaces. Try several encodings because
+    // the openxbl search endpoint is inconsistent with spaces in path segments.
+    const spaceless = data.gamertag.replace(/\s+/g, "");
+    const plusEncoded = data.gamertag.replace(/\s+/g, "+");
+    const candidates = [...new Set([data.gamertag, spaceless, plusEncoded])];
 
+    const errors: string[] = [];
     for (const candidate of candidates) {
-      const res = await fetch(`${XBL_BASE}/search/${encodeURIComponent(candidate)}`, {
-        headers: xblHeaders(),
-      });
+      const url = `${XBL_BASE}/search/${encodeURIComponent(candidate)}`;
+      let res: Response;
+      try {
+        res = await fetch(url, { headers: xblHeaders() });
+      } catch (e) {
+        errors.push(`fetch error: ${e}`);
+        continue;
+      }
       if (!res.ok) {
-        console.error(`[xbox] search ${candidate} → HTTP ${res.status}`);
+        const body = await res.text().catch(() => "");
+        errors.push(`HTTP ${res.status} for "${candidate}": ${body.slice(0, 200)}`);
+        console.error(`[xbox] search "${candidate}" → HTTP ${res.status}`, body.slice(0, 500));
         continue;
       }
       const json = (await res.json()) as { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
-      console.log(`[xbox] search ${candidate} → ${json.people?.length ?? 0} results`);
+      console.log(`[xbox] search "${candidate}" → ${json.people?.length ?? 0} results`, JSON.stringify(json).slice(0, 500));
       const person = json.people?.[0];
       if (person) {
         return {
@@ -45,7 +54,10 @@ export const lookupGamertag = createServerFn({ method: "POST" })
         };
       }
     }
-    return { ok: false as const, error: "Gamertag not found" };
+
+    const detail = errors.length ? ` (${errors[0]})` : "";
+    console.error(`[xbox] all candidates failed for "${data.gamertag}". Errors:`, errors);
+    return { ok: false as const, error: `Gamertag not found${detail}` };
   });
 
 export type XblTitle = {
