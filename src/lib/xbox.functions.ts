@@ -146,11 +146,18 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ xuid: z.string().min(1) }).parse(input))
   .handler(async ({ data }): Promise<{ titles: XblTitle[]; lastActivity: LastActivity | null  }> => {
-    const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(data.xuid)}`;
-    const res = await fetch(url, { headers: xblHeaders() });
-    if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
-    const json = (await res.json()) as { titles?: RawTitle[] };
-    const allTitles = json.titles ?? [];
+    // Paginate through all title pages — the API returns a continuationToken when there are more.
+    const allTitles: RawTitle[] = [];
+    let continuation: string | null = null;
+    do {
+      const url = new URL(`${XBL_BASE}/achievements/player/${encodeURIComponent(data.xuid)}`);
+      if (continuation) url.searchParams.set("continuationToken", continuation);
+      const res = await fetch(url.toString(), { headers: xblHeaders() });
+      if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
+      const json = (await res.json()) as { titles?: RawTitle[]; continuationToken?: string };
+      allTitles.push(...(json.titles ?? []));
+      continuation = json.continuationToken ?? null;
+    } while (continuation);
 
     const titles = allTitles
       .filter((t) => (t.achievement?.progressPercentage ?? 0) >= 100)
