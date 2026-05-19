@@ -119,9 +119,10 @@ async function fetchLastActivity(xuid: string, title: RawTitle): Promise<LastAct
     const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(xuid)}/${encodeURIComponent(title.titleId)}`;
     const res = await fetch(url, { headers: xblHeaders() });
     if (!res.ok) return base;
-    const json = (await res.json()) as { achievements?: RawAchievement[] };
+    const raw = (await res.json()) as { achievements?: RawAchievement[]; content?: { achievements?: RawAchievement[] } };
+    const json = raw.content ?? raw;
     const unlocked = (json.achievements ?? [])
-      .filter((a) => a.progressState === "Achieved" && a.progression?.timeUnlocked)
+      .filter((a) => a.progressState?.toLowerCase() === "achieved" && a.progression?.timeUnlocked)
       .map((a) => ({ a, t: new Date(a.progression!.timeUnlocked!) }))
       .filter(({ t }) => !isNaN(t.getTime()) && t.getFullYear() > 1970)
       .sort((x, y) => y.t.getTime() - x.t.getTime());
@@ -191,15 +192,23 @@ export const getTitleAchievements = createServerFn({ method: "POST" })
     )}/${encodeURIComponent(data.titleId)}`;
     const res = await fetch(url, { headers: xblHeaders() });
     if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
-    const json = (await res.json()) as {
+    const raw = (await res.json()) as {
       achievements?: Array<{
         progression?: { timeUnlocked?: string };
         progressState?: string;
         rewards?: Array<{ value?: string; type?: string }>;
       }>;
+      content?: {
+        achievements?: Array<{
+          progression?: { timeUnlocked?: string };
+          progressState?: string;
+          rewards?: Array<{ value?: string; type?: string }>;
+        }>;
+      };
     };
+    const json = raw.content ?? raw;
     const unlocks = (json.achievements ?? [])
-      .filter((a) => a.progressState === "Achieved" && a.progression?.timeUnlocked)
+      .filter((a) => a.progressState?.toLowerCase() === "achieved" && a.progression?.timeUnlocked)
       .map((a) => new Date(a.progression!.timeUnlocked!))
       .filter((d) => !isNaN(d.getTime()) && d.getFullYear() > 1970);
     if (unlocks.length === 0) {
