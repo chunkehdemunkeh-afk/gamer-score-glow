@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { getCompletedTitles, type XblTitle } from "@/lib/xbox.functions";
+import { getCompletedTitles, type XblTitle, type LastActivity } from "@/lib/xbox.functions";
 import { logCompletion } from "@/lib/completions.functions";
 import { tierLabel, pointsForHours } from "@/lib/scoring";
 import { SiteHeader } from "@/components/site-header";
@@ -15,6 +15,37 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/log")({ component: LogPage });
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function LastActivityPanel({ activity }: { activity: LastActivity }) {
+  return (
+    <div className="mb-4 flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
+      {activity.achievementIcon ? (
+        <img src={activity.achievementIcon} alt="" className="h-12 w-12 shrink-0 rounded" />
+      ) : (
+        <div className="h-12 w-12 shrink-0 rounded bg-secondary" />
+      )}
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">
+          Last seen · {activity.titleName} · {timeAgo(activity.unlockedAt)}
+        </p>
+        <p className="truncate text-sm font-medium">{activity.achievementName}</p>
+        {activity.achievementDescription && (
+          <p className="text-xs text-muted-foreground line-clamp-2">{activity.achievementDescription}</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function LogPage() {
   const { user } = useAuth();
@@ -97,6 +128,9 @@ function LogPage() {
           <Card>
             <CardHeader><CardTitle>Pick a 100%-completed game</CardTitle></CardHeader>
             <CardContent>
+              {titles.data?.lastActivity && (
+                <LastActivityPanel activity={titles.data.lastActivity} />
+              )}
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
                   {available.length > 0 ? `${available.length} game${available.length !== 1 ? "s" : ""} found` : ""}

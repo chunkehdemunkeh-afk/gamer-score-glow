@@ -75,28 +75,70 @@ export type XblTitle = {
   isComplete: boolean;
 };
 
+export type LastActivity = {
+  titleName: string;
+  titleImage: string | null;
+  achievementName: string;
+  achievementDescription: string;
+  achievementIcon: string | null;
+  unlockedAt: string;
+};
+
+type RawTitle = {
+  titleId: string;
+  name: string;
+  displayImage?: string;
+  achievement?: {
+    currentGamerscore?: number;
+    totalGamerscore?: number;
+    progressPercentage?: number;
+  };
+  titleHistory?: { lastTimePlayed?: string };
+};
+
+type RawAchievement = {
+  name?: string;
+  description?: string;
+  progressState?: string;
+  progression?: { timeUnlocked?: string };
+  mediaAssets?: Array<{ type?: string; url?: string }>;
+  rewards?: Array<{ value?: string; type?: string }>;
+};
+
+async function fetchLastActivity(xuid: string, title: RawTitle): Promise<LastActivity | null> {
+  const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(xuid)}/${encodeURIComponent(title.titleId)}`;
+  const res = await fetch(url, { headers: xblHeaders() });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { achievements?: RawAchievement[] };
+  const unlocked = (json.achievements ?? [])
+    .filter((a) => a.progressState === "Achieved" && a.progression?.timeUnlocked)
+    .map((a) => ({ a, t: new Date(a.progression!.timeUnlocked!) }))
+    .filter(({ t }) => !isNaN(t.getTime()) && t.getFullYear() > 1970)
+    .sort((x, y) => y.t.getTime() - x.t.getTime());
+  if (unlocked.length === 0) return null;
+  const { a, t } = unlocked[0];
+  return {
+    titleName: title.name,
+    titleImage: title.displayImage ?? null,
+    achievementName: a.name ?? "Unknown achievement",
+    achievementDescription: a.description ?? "",
+    achievementIcon: a.mediaAssets?.find((m) => m.type === "Icon")?.url ?? null,
+    unlockedAt: t.toISOString(),
+  };
+}
+
 // Fetch all titles for a given xuid and return ONLY 100%-completed ones.
 export const getCompletedTitles = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ xuid: z.string().min(1) }).parse(input))
-  .handler(async ({ data }): Promise<{ titles: XblTitle[] }> => {
+  .handler(async ({ data }): Promise<{ titles: XblTitle[]; lastActivity: LastActivity | null }> => {
     const url = `${XBL_BASE}/achievements/player/${encodeURIComponent(data.xuid)}`;
     const res = await fetch(url, { headers: xblHeaders() });
     if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
-    const json = (await res.json()) as {
-      titles?: Array<{
-        titleId: string;
-        name: string;
-        displayImage?: string;
-        achievement?: {
-          currentGamerscore?: number;
-          totalGamerscore?: number;
-          progressPercentage?: number;
-        };
-        titleHistory?: { lastTimePlayed?: string };
-      }>;
-    };
-    const titles = (json.titles ?? [])
+    const json = (await res.json()) as { titles?: RawTitle[] };
+    const allTitles = json.titles ?? [];
+
+    const titles = allTitles
       .filter((t) => (t.achievement?.progressPercentage ?? 0) >= 100)
       .map<XblTitle>((t) => ({
         titleId: String(t.titleId),
@@ -108,7 +150,19 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
         latestUnlock: t.titleHistory?.lastTimePlayed ?? null,
         isComplete: true,
       }));
-    return { titles };
+
+    // Find the most recently played title across all titles to gauge API staleness.
+    const mostRecent = allTitles
+      .filter((t) => t.titleHistory?.lastTimePlayed)
+      .sort(
+        (a, b) =>
+          new Date(b.titleHistory!.lastTimePlayed!).getTime() -
+          new Date(a.titleHistory!.lastTimePlayed!).getTime(),
+      )[0] ?? null;
+
+    const lastActivity = mostRecent ? await fetchLastActivity(data.xuid, mostRecent) : null;
+
+    return { titles, lastActivity };
   });
 
 // Fetch achievement unlock timestamps for a single title (for anti-cheat).
