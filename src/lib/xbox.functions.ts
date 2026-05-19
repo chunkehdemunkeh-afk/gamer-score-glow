@@ -152,9 +152,10 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
       if (continuation) url.searchParams.set("continuationToken", continuation);
       const res = await fetch(url.toString(), { headers: xblHeaders() });
       if (!res.ok) throw new Error(`Xbox API error: ${res.status}`);
-      const json = (await res.json()) as { titles?: RawTitle[]; continuationToken?: string };
-      allTitles.push(...(json.titles ?? []));
-      continuation = json.continuationToken ?? null;
+      const json = (await res.json()) as { titles?: RawTitle[]; continuationToken?: string; content?: { titles?: RawTitle[]; continuationToken?: string } };
+      const page = json.content ?? json;
+      allTitles.push(...(page.titles ?? []));
+      continuation = page.continuationToken ?? null;
     } while (continuation);
 
     const titles = allTitles
