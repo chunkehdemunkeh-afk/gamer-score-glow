@@ -7,7 +7,7 @@ const XBL_BASE = "https://xbl.io/api/v2";
 function xblHeaders() {
   const key = process.env.OPENXBL_API_KEY;
   if (!key) throw new Error("OPENXBL_API_KEY not configured");
-  return { "X-Authorization": key, Accept: "application/json" } as Record<string, string>;
+  return { "X-Authorization": key, Accept: "application/json", "Accept-Language": "en-GB" } as Record<string, string>;
 }
 
 // Log a completion with anti-cheat checks.
@@ -49,16 +49,24 @@ export const logCompletion = createServerFn({ method: "POST" })
     )}/${encodeURIComponent(data.titleId)}`;
     const xblRes = await fetch(url, { headers: xblHeaders() });
     if (!xblRes.ok) return { ok: false as const, error: "Could not verify with Xbox" };
-    const xblJson = (await xblRes.json()) as {
+    const xblRaw = (await xblRes.json()) as {
       achievements?: Array<{
         progression?: { timeUnlocked?: string };
         progressState?: string;
         rewards?: Array<{ value?: string; type?: string }>;
       }>;
+      content?: {
+        achievements?: Array<{
+          progression?: { timeUnlocked?: string };
+          progressState?: string;
+          rewards?: Array<{ value?: string; type?: string }>;
+        }>;
+      };
     };
+    const xblJson = xblRaw.content ?? xblRaw;
     const all = xblJson.achievements ?? [];
     if (all.length === 0) return { ok: false as const, error: "No achievements found for this title" };
-    const achieved = all.filter((a) => a.progressState === "Achieved");
+    const achieved = all.filter((a) => a.progressState?.toLowerCase() === "achieved");
     if (achieved.length !== all.length) {
       return { ok: false as const, error: "Game is not 100% completed yet" };
     }
