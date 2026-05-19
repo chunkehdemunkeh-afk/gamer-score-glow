@@ -78,7 +78,6 @@ export type XblTitle = {
 export type LastActivity = {
   titleName: string;
   titleImage: string | null;
-  lastTimePlayed: string;
   achievementName: string | null;
   achievementDescription: string | null;
   achievementIcon: string | null;
@@ -111,7 +110,6 @@ async function fetchLastActivity(xuid: string, title: RawTitle): Promise<LastAct
   const base: LastActivity = {
     titleName: title.name,
     titleImage: title.displayImage ?? null,
-    lastTimePlayed: title.titleHistory!.lastTimePlayed!,
     achievementName: null,
     achievementDescription: null,
     achievementIcon: null,
@@ -172,18 +170,12 @@ export const getCompletedTitles = createServerFn({ method: "POST" })
         isComplete: true,
       }));
 
-    // Find the most recently played game (skip apps, which have no achievements endpoint).
-    const mostRecent = allTitles
-      .filter((t) => t.titleHistory?.lastTimePlayed && t.titleType?.toLowerCase() !== "application")
-      .sort(
-        (a, b) =>
-          new Date(b.titleHistory!.lastTimePlayed!).getTime() -
-          new Date(a.titleHistory!.lastTimePlayed!).getTime(),
-      )[0] ?? null;
+    // The API returns titles sorted by most-recently-played; skip apps which have no achievements.
+    const mostRecent = allTitles.find((t) => t.titleType?.toLowerCase() !== "application") ?? allTitles[0] ?? null;
 
     const lastActivity = mostRecent ? await fetchLastActivity(data.xuid, mostRecent) : null;
 
-    return { titles, lastActivity, _sampleTitle: allTitles[0] ?? null };
+    return { titles, lastActivity };
   });
 
 // Fetch achievement unlock timestamps for a single title (for anti-cheat).
