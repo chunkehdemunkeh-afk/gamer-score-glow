@@ -97,6 +97,31 @@ function LogPage() {
           <Card>
             <CardHeader><CardTitle>Pick a 100%-completed game</CardTitle></CardHeader>
             <CardContent>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {available.length > 0 ? `${available.length} game${available.length !== 1 ? "s" : ""} found` : ""}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={titles.isFetching}
+                  onClick={async () => {
+                    const prev = titles.data?.titles.length ?? 0;
+                    const result = await titles.refetch();
+                    const next = result.data?.titles.length ?? 0;
+                    const newAvailable = (result.data?.titles ?? []).filter(
+                      (t) => !existing.data?.has(t.titleId),
+                    ).length;
+                    if (next > prev) {
+                      toast.success(`Found ${newAvailable} completed game${newAvailable !== 1 ? "s" : ""}`);
+                    } else {
+                      toast.info("No new completions yet — Xbox API can take a few minutes to sync.");
+                    }
+                  }}
+                >
+                  {titles.isFetching ? "Refreshing…" : "Refresh"}
+                </Button>
+              </div>
               {titles.isLoading ? (
                 <p className="text-muted-foreground">Fetching your completed games from Xbox…</p>
               ) : titles.isError ? (
