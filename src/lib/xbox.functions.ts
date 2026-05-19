@@ -10,7 +10,7 @@ function xblHeaders() {
   return {
     "X-Authorization": key,
     Accept: "application/json",
-    "Content-Type": "application/json",
+    "Accept-Language": "en-GB",
   } as Record<string, string>;
 }
 
@@ -45,8 +45,9 @@ export const lookupGamertag = createServerFn({ method: "POST" })
         console.error(`[xbox] search "${candidate}" → HTTP ${res.status}`, body.slice(0, 500));
         continue;
       }
-      const json = (await res.json()) as { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
-      console.log(`[xbox] search "${candidate}" → ${json.people?.length ?? 0} results`, JSON.stringify(json).slice(0, 500));
+      const raw = await res.text();
+      let json: { people?: Array<{ xuid: string; gamertag: string; displayPicRaw?: string }> };
+      try { json = JSON.parse(raw); } catch { errors.push(`Bad JSON: ${raw.slice(0, 200)}`); continue; }
       const person = json.people?.[0];
       if (person) {
         return {
@@ -56,11 +57,11 @@ export const lookupGamertag = createServerFn({ method: "POST" })
           gamerpic: person.displayPicRaw ?? null,
         };
       }
+      errors.push(`200 but no person for "${candidate}": ${raw.slice(0, 300)}`);
     }
 
-    const detail = errors.length ? ` (${errors[0]})` : "";
     console.error(`[xbox] all candidates failed for "${data.gamertag}". Errors:`, errors);
-    return { ok: false as const, error: `Gamertag not found${detail}` };
+    return { ok: false as const, error: errors[0] ?? "Gamertag not found" };
   });
 
 export type XblTitle = {
