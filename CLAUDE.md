@@ -45,6 +45,14 @@ Routes live in `src/routes/` and are file-based (TanStack Router). The generated
 
 Business logic that needs secrets or must not run in the browser lives in `src/lib/*.functions.ts` as TanStack Start `createServerFn` calls. Server functions requiring a logged-in user apply the `requireSupabaseAuth` middleware (`src/integrations/supabase/auth-middleware.ts`), which reads the `Authorization: Bearer <token>` header, validates it against Supabase, and injects `{ supabase, userId, claims }` into `context`.
 
+### openxbl.io API quirks
+
+- The search endpoint (`GET /search/{gamertag}`) wraps its response in a `content` object: `{ content: { people: [...] } }` — not `{ people: [...] }` at the top level.
+- Old-format Xbox gamertags with spaces (pre-2019) must be sent with a raw space in the URL path, not `%20`. Use `encodeURIComponent(tag).replace(/%20/g, " ")`.
+- Do not send `Content-Type` on GET requests; use `Accept-Language: en-GB` instead.
+
+### Server functions
+
 Key server functions:
 - `lookupGamertag` — public; resolves gamertag → xuid + avatar via openxbl.io
 - `getCompletedTitles` — auth-gated; fetches the user's 100%-completed Xbox titles
