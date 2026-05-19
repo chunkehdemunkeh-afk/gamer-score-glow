@@ -83,9 +83,10 @@ export const logCompletion = createServerFn({ method: "POST" })
       return sum + (gs ? parseInt(gs, 10) || 0 : 0);
     }, 0);
 
-    // Shovelware fast-path: window < 90 min and GS >= 500.
-    // No anti-cheat needed — award 1 point and approve immediately.
-    const isShovelware = realWorldSpanHours < 1.5 && totalGs >= 500;
+    // Shovelware fast-path: high GS per achievement is the reliable signal.
+    // Window-based detection breaks for title-updated games played over a long period.
+    const gsPerAchievement = all.length > 0 ? totalGs / all.length : 0;
+    const isShovelware = gsPerAchievement >= 80 && totalGs >= 500;
     if (isShovelware) {
       const { data: inserted, error: insertErr } = await supabase
         .from("completions")

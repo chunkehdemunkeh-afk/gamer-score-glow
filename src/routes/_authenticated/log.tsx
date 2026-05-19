@@ -107,9 +107,9 @@ function LogPage() {
 
   const isShovelware = (() => {
     const d = gameAchievements.data;
-    if (!d?.earliestUnlock || !d?.latestUnlock) return false;
-    const windowHours = (new Date(d.latestUnlock).getTime() - new Date(d.earliestUnlock).getTime()) / 36e5;
-    return windowHours < 1.5 && d.totalGamerscore >= 500;
+    if (!d || d.achievementCount === 0) return false;
+    const gsPerAchievement = d.totalGamerscore / d.achievementCount;
+    return gsPerAchievement >= 80 && d.totalGamerscore >= 500;
   })();
 
   const available = (titles.data?.titles ?? []).filter((t) => !existing.data?.has(t.titleId));
