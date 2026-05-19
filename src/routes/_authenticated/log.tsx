@@ -136,8 +136,10 @@ function LogPage() {
           <Card>
             <CardHeader><CardTitle>Pick a 100%-completed game</CardTitle></CardHeader>
             <CardContent>
-              {titles.data?.lastActivity && (
-                <LastActivityPanel activity={titles.data.lastActivity} />
+              {titles.data && (
+                titles.data.lastActivity
+                  ? <LastActivityPanel activity={titles.data.lastActivity} />
+                  : <p className="mb-3 text-xs text-muted-foreground">Last activity: unavailable (lastActivity null)</p>
               )}
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
