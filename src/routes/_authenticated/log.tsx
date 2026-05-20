@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -66,6 +66,7 @@ function LogPage() {
   const [selected, setSelected] = useState<XblTitle | null>(null);
   const [hours, setHours] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const submitCardRef = useRef<HTMLDivElement>(null);
 
   const profile = useQuery({
     queryKey: ["profile", user?.id],
@@ -104,6 +105,12 @@ function LogPage() {
     enabled: !!profile.data?.xuid && !!selected,
     queryFn: () => fetchAchievements({ data: { xuid: profile.data!.xuid, titleId: selected!.titleId } }),
   });
+
+  useEffect(() => {
+    if (selected) {
+      submitCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selected]);
 
   const isShovelware = (() => {
     const d = gameAchievements.data;
@@ -221,7 +228,7 @@ function LogPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={submitCardRef}>
             <CardHeader>
               <CardTitle>{isShovelware ? "Shovelware detected" : "Hours played"}</CardTitle>
             </CardHeader>

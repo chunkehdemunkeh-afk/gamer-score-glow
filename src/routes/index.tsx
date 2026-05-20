@@ -31,17 +31,21 @@ function HomePage() {
     queryKey: ["leaderboard"],
     refetchInterval: 30_000,
     queryFn: async (): Promise<LeaderRow[]> => {
-      const { data, error } = await supabase
-        .from("completions")
-        .select("user_id, points, profiles!inner(gamertag, gamerpic)")
-        .eq("status", "approved");
-      if (error) throw error;
+      const [{ data: comps, error: e1 }, { data: profs, error: e2 }] = await Promise.all([
+        supabase.from("completions").select("user_id, points").eq("status", "approved"),
+        supabase.from("profiles").select("user_id, gamertag, gamerpic"),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+      const profileMap = new Map((profs ?? []).map((p) => [p.user_id, p]));
       const agg = new Map<string, LeaderRow>();
-      for (const row of (data as any[]) ?? []) {
+      for (const row of (comps as any[]) ?? []) {
+        const prof = profileMap.get(row.user_id);
+        if (!prof) continue;
         const prev = agg.get(row.user_id) ?? {
           user_id: row.user_id,
-          gamertag: row.profiles.gamertag,
-          gamerpic: row.profiles.gamerpic,
+          gamertag: prof.gamertag,
+          gamerpic: prof.gamerpic,
           total_points: 0,
           completions: 0,
         };
@@ -57,14 +61,25 @@ function HomePage() {
     queryKey: ["recent-completions"],
     refetchInterval: 30_000,
     queryFn: async (): Promise<RecentRow[]> => {
-      const { data, error } = await supabase
+      const { data: comps, error: e1 } = await supabase
         .from("completions")
-        .select("id, game_name, game_cover_url, points, completed_at, hours_played, profile:profiles!inner(gamertag, gamerpic)")
+        .select("id, game_name, game_cover_url, points, completed_at, hours_played, user_id")
         .eq("status", "approved")
         .order("completed_at", { ascending: false })
         .limit(20);
-      if (error) throw error;
-      return (data as any) ?? [];
+      if (e1) throw e1;
+      if (!comps?.length) return [];
+      const userIds = [...new Set(comps.map((c) => c.user_id))];
+      const { data: profs, error: e2 } = await supabase
+        .from("profiles")
+        .select("user_id, gamertag, gamerpic")
+        .in("user_id", userIds);
+      if (e2) throw e2;
+      const profileMap = new Map((profs ?? []).map((p) => [p.user_id, p]));
+      return comps.map((c) => {
+        const prof = profileMap.get(c.user_id) ?? null;
+        return { ...c, profile: prof ? { gamertag: prof.gamertag, gamerpic: prof.gamerpic } : null };
+      });
     },
   });
 
